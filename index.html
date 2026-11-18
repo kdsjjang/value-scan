@@ -168,28 +168,25 @@
                                 <p class="text-sm font-semibold text-[#1d1d1f]">아이폰 15 프로</p>
                                 <p class="text-xs text-[#6e6e73]">256GB · 내추럴 티타늄</p>
                             </div>
-                            <span class="text-xs text-[#6e6e73]">780,000원</span>
                         </button>
                         <button onclick="loadSample('switch2')" class="w-full apple-card bg-white px-4 py-3.5 flex items-center justify-between text-left">
                             <div>
                                 <p class="text-sm font-semibold text-[#1d1d1f]">닌텐도 스위치 2</p>
                                 <p class="text-xs text-[#6e6e73]">풀박스 · S 등급</p>
                             </div>
-                            <span class="text-xs text-[#6e6e73]">620,000원</span>
                         </button>
                         <button onclick="loadSample('rtx5090')" class="w-full apple-card bg-white px-4 py-3.5 flex items-center justify-between text-left">
                             <div>
                                 <p class="text-sm font-semibold text-[#1d1d1f]">지포스 RTX 5090</p>
                                 <p class="text-xs text-[#6e6e73]">32GB · 국내 정품</p>
                             </div>
-                            <span class="text-xs text-[#6e6e73]">8,900,000원</span>
+
                         </button>
                         <button onclick="loadSample('headphone')" class="w-full apple-card bg-white px-4 py-3.5 flex items-center justify-between text-left">
                             <div>
                                 <p class="text-sm font-semibold text-[#1d1d1f]">소니 WH-1000XM5</p>
                                 <p class="text-xs text-[#6e6e73]">노이즈캔슬링 헤드폰</p>
                             </div>
-                            <span class="text-xs text-[#6e6e73]">260,000원</span>
                         </button>
                     </div>
                 </div>
@@ -212,7 +209,7 @@
                                 <div class="scan-laser"></div>
                                 <div class="w-8 h-8 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin mb-3"></div>
                                 <p class="font-semibold text-sm text-[#1d1d1f]">정밀 분석 진행 중</p>
-                                <p id="scanProgressText" class="text-xs text-[#6e6e73] mt-1">1/3단계: 사진 압축 및 이미지 인코딩 중...</p>
+                                <p id="scanProgressText" class="text-xs text-[#6e6e73] mt-1">사진 압축 및 이미지 인코딩 중...</p>
                             </div>
                         </div>
 
@@ -335,7 +332,6 @@
                         <div class="apple-card p-5 space-y-3">
                             <div class="flex items-start justify-between">
                                 <div>
-                                    <span class="text-[11px] font-semibold text-[#bf4800]">수수료 0원 · 개인 직거래</span>
                                     <h5 class="text-sm font-semibold text-[#1d1d1f] mt-0.5">당근마켓 판매글 등록하기</h5>
                                     <p class="text-xs text-[#6e6e73] mt-0.5">AI 검수 내역이 포함된 판매글을 복사하고 당근마켓을 엽니다.</p>
                                 </div>
@@ -357,7 +353,6 @@
                         <div class="apple-card p-5 space-y-3 bg-[#f5f5f7]/50">
                             <div class="flex items-start justify-between">
                                 <div>
-                                    <span class="text-[11px] font-semibold text-[#0071e3]">오늘 바로 정산 · 중개 수수료 3.5%</span>
                                     <h5 class="text-sm font-semibold text-[#1d1d1f] mt-0.5">제휴 매입처 즉시 판매</h5>
                                     <p class="text-xs text-[#6e6e73] mt-0.5">직거래 흥정 없이 제휴 전문 매입 파트너에게 즉시 매각합니다.</p>
                                 </div>
@@ -685,9 +680,9 @@
         function loadSample(key) {
             const sample = presets[key];
             if (!sample) return;
-            startScanUI(sample.img, "1/3단계: 사진 압축 및 이미지 인코딩 중...");
-            setTimeout(() => { updateProgressText("2/3단계: Gemini AI 비전 모델 분석 중..."); }, 300);
-            setTimeout(() => { updateProgressText("3/3단계: 중고 거래 시세 및 수익 모델 산출 중..."); }, 600);
+            startScanUI(sample.img, "사진 압축 및 이미지 인코딩 중...");
+            setTimeout(() => { updateProgressText("Gemini AI 비전 모델 분석 중..."); }, 300);
+            setTimeout(() => { updateProgressText("중고 거래 시세 및 수익 모델 산출 중..."); }, 600);
             setTimeout(() => { 
                 sample.trend = calculateTrendArray(sample.price, sample.pPrev);
                 finishAnalysisUI({ ...sample }); 
@@ -733,7 +728,7 @@
                 return;
             }
 
-            startScanUI('', "1/3단계: 사진 압축 및 이미지 인코딩 중...");
+            startScanUI('', "사진 압축 및 이미지 인코딩 중...");
 
             compressImage(file, function(compressedDataUrl) {
                 document.getElementById('itemPreviewImg').src = compressedDataUrl;
@@ -746,7 +741,7 @@
             const maxRetries = 2;
 
             if (retryCount === 0) {
-                updateProgressText("2/3단계: Gemini AI 비전 모델 분석 중...");
+                updateProgressText("Gemini AI 비전 모델 분석 중...");
             } else {
                 updateProgressText(`서버 반응 대기 중... 재연결 시도 (${retryCount}/${maxRetries}회)`);
             }
@@ -809,7 +804,7 @@
                     const textResult = result.candidates[0].content.parts.map(p => p.text || '').join('\n');
                     const jsonMatch = textResult.match(/\{[\s\S]*\}/);
                     if (jsonMatch) {
-                        updateProgressText("3/3단계: 중고 거래 시세 및 수익 모델 산출 중...");
+                        updateProgressText("중고 거래 시세 및 수익 모델 산출 중...");
                         
                         const parsedData = JSON.parse(jsonMatch[0]);
                         parsedData.img = dataUrl;
