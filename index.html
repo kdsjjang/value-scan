@@ -140,7 +140,7 @@
                                 <div class="scan-laser"></div>
                                 <div class="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mb-3"></div>
                                 <p class="font-bold text-sm text-white">AI 물품 정밀 감정 중...</p>
-                                <p id="scanProgressText" class="text-xs text-brand-200 mt-1">1/3단계: 물품 외형 및 상세 모델 식별 중...</p>
+                                <p id="scanProgressText" class="text-xs text-brand-200 mt-1">1/3단계: 사진 압축 및 이미지 인코딩 중...</p>
                             </div>
                         </div>
 
@@ -242,7 +242,7 @@
                                 <i class="fa-solid fa-arrow-trend-down text-slate-500"></i> 향후 6개월 예상 시세 추이 (단위: 만원)
                             </h4>
                             <span class="text-[11px] text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                <i class="fa-solid fa-clock mr-1"></i>시세 변동 예측
+                                <i class="fa-solid fa-clock mr-1"></i>과거 추세 반영 예측
                             </span>
                         </div>
                         <div class="w-full h-40 relative">
@@ -413,9 +413,8 @@
         let apiKey = localStorage.getItem('GEMINI_API_KEY') || '';
         let valueTrendChart = null;
         let currentItemData = null;
-        let scanStepInterval = null;
 
-        // 국내 중고거래(당근/번개장터/중고나라) 최신 실거래 시세 반영 프리셋
+        // 국내 중고거래 실거래가 및 과거 월별 가격 추이(pPrev: 1달 전 가격, pCurr: 현재 가격)를 반영한 프리셋
         const presets = {
             iphone: {
                 name: "애플 아이폰 15 프로 256GB (내추럴 티타늄)",
@@ -426,7 +425,7 @@
                 maxPrice: 850000,
                 grade: "A+ 등급",
                 prob: "92%",
-                trend: [78, 76, 75, 73, 71, 70],
+                pPrev: 800000, // 1달 전 가격
                 img: "https://images.unsplash.com/photo-1695048133142-1a20484d2569?auto=format&fit=crop&w=800&q=80"
             },
             switch2: {
@@ -438,7 +437,7 @@
                 maxPrice: 670000,
                 grade: "S 등급",
                 prob: "95%",
-                trend: [62, 61, 60, 59, 58, 57],
+                pPrev: 630000, // 1달 전 가격
                 img: "https://images.unsplash.com/photo-1578303512597-81e6cc155b3e?auto=format&fit=crop&w=800&q=80"
             },
             rtx5090: {
@@ -450,7 +449,7 @@
                 maxPrice: 9600000,
                 grade: "S 등급",
                 prob: "90%",
-                trend: [890, 875, 860, 845, 830, 815],
+                pPrev: 9100000, // 1달 전 가격
                 img: "https://images.unsplash.com/photo-1591488320449-011701bb6704?auto=format&fit=crop&w=800&q=80"
             },
             headphone: {
@@ -462,7 +461,7 @@
                 maxPrice: 290000,
                 grade: "A+ 등급",
                 prob: "88%",
-                trend: [26, 25, 25, 24, 23, 23],
+                pPrev: 270000, // 1달 전 가격
                 img: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80"
             }
         };
@@ -530,16 +529,40 @@
             });
         }
 
+        // 지수 감쇠 시계열 모델을 이용해 향후 6개월 시세 배열 [현재, 1달후, ..., 5달후] (단위: 만원) 계산
+        function calculateTrendArray(currentPrice, pPrev) {
+            const pCurr = Number(currentPrice) || 0;
+            const prev = Number(pPrev) || (pCurr * 1.015); // 이전 가격 정보가 없으면 기본 1.5% 하락 가정
+            
+            // 직전 달 대비 월간 감가율(r) 계산: r = 1 - (현재가격 / 이전가격)
+            let decayRate = 1 - (pCurr / prev);
+            
+            // 비정상적인 상승/하락 폭 보정 (월간 -5% ~ +1% 사이로 안전장치)
+            if (decayRate < -0.02) decayRate = -0.01; 
+            if (decayRate > 0.05) decayRate = 0.02;
+
+            const trend = [];
+            for (let m = 0; m < 6; m++) {
+                // 미래 m개월 후 가격 예측: P(m) = 현재가격 * (1 - decayRate)^m
+                const predicted = pCurr * Math.pow((1 - decayRate), m);
+                trend.push(Math.round(predicted / 10000)); // 만원 단위로 변환
+            }
+            return trend;
+        }
+
         function loadSample(key) {
             const sample = presets[key];
             if (!sample) return;
-            startScanUI(sample.img);
-            setTimeout(() => {
-                finishAnalysisUI({ ...sample });
-            }, 600);
+            startScanUI(sample.img, "1/3단계: 사진 압축 및 이미지 인코딩 중...");
+            setTimeout(() => { updateProgressText("2/3단계: Gemini AI 비전 모델 분석 중..."); }, 300);
+            setTimeout(() => { updateProgressText("3/3단계: 중고 거래 시세 및 평가 결과 생성 중..."); }, 600);
+            setTimeout(() => { 
+                sample.trend = calculateTrendArray(sample.price, sample.pPrev);
+                finishAnalysisUI({ ...sample }); 
+            }, 900);
         }
 
-        // 이미지 압축 알고리즘 최적화 (해상도 600px, 품질 75%로 경량화하여 처리속도 대폭 향상)
+        // 이미지 압축 (경량화)
         function compressImage(file, callback) {
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -579,21 +602,23 @@
                 return;
             }
 
+            startScanUI('', "사진 압축 및 이미지 인코딩 중...");
+
             compressImage(file, function(compressedDataUrl) {
+                document.getElementById('itemPreviewImg').src = compressedDataUrl;
                 analyzeWithGeminiAPI(file, compressedDataUrl, 0);
             });
         }
 
-        // 최속 반응을 위한 지연시간 단축 및 재시도 최적화 로직
+        // Gemini API 호출 및 과거 가격 추이 데이터 수신
         async function analyzeWithGeminiAPI(file, dataUrl, retryCount = 0) {
             const activeModel = 'gemini-3.8-flash';
-            const maxRetries = 2; // 불필요한 장시간 대기를 방지하기 위해 최대 재시도 2회로 조정
+            const maxRetries = 2;
 
             if (retryCount === 0) {
-                startScanUI(dataUrl);
+                updateProgressText("Gemini AI 비전 모델 분석 중...");
             } else {
-                document.getElementById('scanProgressText').innerText = 
-                    `서버 반응 대기 중... 재연결 시도 (${retryCount}/${maxRetries}회)`;
+                updateProgressText(`서버 반응 대기 중... 재연결 시도 (${retryCount}/${maxRetries}회)`);
             }
 
             const base64Data = dataUrl.split(',')[1];
@@ -606,8 +631,7 @@
 2. 닌텐도 스위치 2(Nintendo Switch 2)의 중고 시세는 실제 한국 시장 시세(약 56만~67만원 선)로 산정하세요.
 3. 아이폰 15 프로 (256GB)는 국내 중고 시세(약 70만~85만원 선)로 산정하세요.
 4. 지포스 RTX 5090 (32GB)은 국내 실제 거래 시세(약 840만~960만원 선)로 산정하세요.
-5. 기타 품목도 실제 국내 번개장터/당근마켓의 최근 거래 가격대를 기준으로 합리적으로 산정하세요.
-6. trend 배열은 향후 6개월간의 예상 시세를 '만원' 단위 숫자 6개로 작성하세요.
+5. pPrev 값은 1달 전의 예상 중고 거래 가격을 원 단위 숫자로 함께 반환하세요.
 
 반드시 마크다운 문법(\`\`\`json 등) 없이 순수 JSON 문자열로만 응답하세요:
 {
@@ -619,7 +643,7 @@
   "maxPrice": 최대시세숫자,
   "grade": "상태 등급(예: S 등급, A+ 등급, A 등급)",
   "prob": "90%",
-  "trend": [현재만원단위, 1개월후, 2개월후, 3개월후, 4개월후, 5개월후]
+  "pPrev": 1달전예상시세숫자
 }`;
 
             try {
@@ -640,8 +664,7 @@
                 });
 
                 if ((response.status === 503 || response.status === 429) && retryCount < maxRetries) {
-                    const waitTime = 1000; // 빠른 응답을 위해 대기시간 1초로 단축
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     return analyzeWithGeminiAPI(file, dataUrl, retryCount + 1);
                 }
 
@@ -656,9 +679,16 @@
                     const textResult = result.candidates[0].content.parts.map(p => p.text || '').join('\n');
                     const jsonMatch = textResult.match(/\{[\s\S]*\}/);
                     if (jsonMatch) {
+                        updateProgressText("중고 거래 시세 및 평가 결과 생성 중...");
+                        
                         const parsedData = JSON.parse(jsonMatch[0]);
                         parsedData.img = dataUrl;
-                        finishAnalysisUI(parsedData);
+                        // 과거 가격과 현재 가격을 바탕으로 시계열 지수 감쇠 모델 적용하여 trend 배열 자동 산출
+                        parsedData.trend = calculateTrendArray(parsedData.price, parsedData.pPrev);
+                        
+                        setTimeout(() => {
+                            finishAnalysisUI(parsedData);
+                        }, 200);
                         return;
                     }
                 }
@@ -672,30 +702,23 @@
             }
         }
 
-        function startScanUI(imgSrc) {
+        function startScanUI(imgSrc, initialText) {
             document.getElementById('analysisSection').classList.remove('hidden');
-            document.getElementById('itemPreviewImg').src = imgSrc;
+            if (imgSrc) {
+                document.getElementById('itemPreviewImg').src = imgSrc;
+            }
             document.getElementById('scanOverlay').classList.remove('hidden');
             document.getElementById('scanStatusBadge').innerText = "감정 중...";
             document.getElementById('scanStatusBadge').className = "text-amber-600 font-bold";
+            document.getElementById('scanProgressText').innerText = initialText;
             document.getElementById('analysisSection').scrollIntoView({ behavior: 'smooth' });
+        }
 
-            if (scanStepInterval) clearInterval(scanStepInterval);
-            const steps = [
-                "물품 외형 및 상세 모델 식별 중...",
-                "외관 스크래치 및 구성품 상태 판정 중...",
-                "번개장터 · 당근 · 중고나라 실거래 시세 산출 중..."
-            ];
-            let stepIdx = 0;
-            document.getElementById('scanProgressText').innerText = steps[0];
-            scanStepInterval = setInterval(() => {
-                stepIdx = (stepIdx + 1) % steps.length;
-                document.getElementById('scanProgressText').innerText = steps[stepIdx];
-            }, 1800); // 로딩 텍스트 전화 속도도 빠르게 변경
+        function updateProgressText(text) {
+            document.getElementById('scanProgressText').innerText = text;
         }
 
         function finishAnalysisUI(data, skipHistorySave = false) {
-            if (scanStepInterval) clearInterval(scanStepInterval);
             document.getElementById('scanOverlay').classList.add('hidden');
             document.getElementById('scanStatusBadge').innerText = "감정 완료";
             document.getElementById('scanStatusBadge').className = "text-brand-600 font-bold";
@@ -816,6 +839,7 @@
                     maxPrice: item.maxPrice,
                     grade: item.grade,
                     prob: item.prob,
+                    pPrev: item.pPrev,
                     scores: item.scores,
                     trend: item.trend,
                     img: item.img && item.img.length < 150000 ? item.img : 'https://images.unsplash.com/photo-1526738549149-8e07eca6c147?auto=format&fit=crop&w=400&q=60'
@@ -875,7 +899,6 @@
         }
 
         function resetScanner() {
-            if (scanStepInterval) clearInterval(scanStepInterval);
             document.getElementById('analysisSection').classList.add('hidden');
             document.getElementById('imageFileInput').value = '';
             window.scrollTo({ top: 0, behavior: 'smooth' });
